@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/vishesh/inference-gateway/internal/backend"
 	"github.com/vishesh/inference-gateway/internal/cache"
 	"github.com/vishesh/inference-gateway/internal/config"
 	"github.com/vishesh/inference-gateway/internal/cost"
@@ -31,11 +32,37 @@ func main() {
 	}
 
 	log.Printf("Starting Inference Gateway on port %d", cfg.Server.Port)
-	log.Printf("Engine URL: %s", cfg.Engine.URL)
+	
+	// Initialize backend registry and router
+	registry := backend.NewRegistry()
+	router := backend.NewRouter(registry)
+	
+	// Register backends from config
+	if len(cfg.Backends) > 0 {
+		for _, bcfg := range cfg.Backends {
+			log.Printf("Registering backend: %s (%s)", bcfg.ID, bcfg.URL)
+			
+			// Create backend
+			be := &backend.Backend{
+				ID:       bcfg.ID,
+				URL:      bcfg.URL,
+				Model:    bcfg.Model,
+				Capacity: bcfg.Capacity,
+				Status:   backend.StatusHealthy,
+			}
+			registry.Register(be)
+			
+			// Create engine client for this backend
+			client := engine.NewClient(bcfg.URL, bcfg.Timeout, bcfg.MaxRetries)
+			router.RegisterClient(bcfg.ID, client)
+		}
+	} else {
+		log.Fatal("No backends configured. Please add backends to config.yaml")
+	}
+	
 	log.Printf("Max in-flight: %d, Queue size: %d", cfg.Scheduler.MaxInFlight, cfg.Scheduler.QueueSize)
 
 	// Initialize components
-	engineClient := engine.NewClient(cfg.Engine.URL, cfg.Engine.Timeout, cfg.Engine.MaxRetries)
 	admission := scheduler.NewAdmissionController(cfg.Scheduler.QueueSize)
 	sched := scheduler.NewScheduler(int64(cfg.Scheduler.MaxInFlight))
 	cacheInstance := cache.New(cfg.Cache.Enabled, cfg.Cache.MaxEntries, cfg.Cache.TTL)
@@ -44,6 +71,54 @@ func main() {
 	batcher := scheduler.NewEmbeddingBatcher(cfg.Scheduler.EmbedMaxBatch, cfg.Scheduler.EmbedMaxWaitMs)
 
 	log.Printf("Cost tracking: GPU hourly rate = $%.2f", cfg.Cost.GPUHourlyRate)
+	
+	// Start health checker
+	healthChecker := backend.NewHealthChecker(
+		registry,
+		cfg.Health.CheckInterval,
+		cfg.Health.CheckTimeout,
+		func(ctx context.Context, url string) error {
+			// Simple health check - try to reach /health endpoint
+			req, err := http.NewRequestWithContext(ctx, "GET", url+"/health", nil)
+			if err != nil {
+				return err
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("unhealthy status: %d", resp.StatusCode)
+			}
+			return nil
+		},
+	)
+	go healthChecker.Start()
+	defer healthChecker.Stop()
+	
+	// Update backend metrics periodically
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			for _, be := range registry.GetAll() {
+				be.mu.RLock()
+				if be.Status == backend.StatusHealthy {
+					metricsInstance.BackendHealth.WithLabelValues(be.ID, "healthy").Set(1)
+				} else {
+					metricsInstance.BackendHealth.WithLabelValues(be.ID, "unhealthy").Set(0)
+				}
+				metricsInstance.BackendInFlight.WithLabelValues(be.ID).Set(float64(be.CurrentLoad))
+				if be.CircuitOpen {
+					metricsInstance.BackendCircuitOpen.WithLabelValues(be.ID).Set(1)
+				} else {
+					metricsInstance.BackendCircuitOpen.WithLabelValues(be.ID).Set(0)
+				}
+				be.mu.RUnlock()
+			}
+		}
+	}()
 
 	// Create handler
 	h := handler.New(

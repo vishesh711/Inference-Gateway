@@ -20,6 +20,12 @@ type Metrics struct {
 	BatchSize                prometheus.Histogram
 	RejectedTotal            *prometheus.CounterVec
 	StreamingConnections     prometheus.Gauge
+	// Backend metrics
+	BackendHealth            *prometheus.GaugeVec
+	BackendRequestsTotal     *prometheus.CounterVec
+	BackendLatencySeconds    *prometheus.HistogramVec
+	BackendInFlight          *prometheus.GaugeVec
+	BackendCircuitOpen       *prometheus.GaugeVec
 }
 
 // New creates and registers all metrics
@@ -110,6 +116,42 @@ func New() *Metrics {
 				Name: "gateway_streaming_connections",
 				Help: "Current number of active streaming connections",
 			},
+		),
+		BackendHealth: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "gateway_backend_health",
+				Help: "Backend health status (1=healthy, 0=unhealthy)",
+			},
+			[]string{"backend_id", "status"},
+		),
+		BackendRequestsTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_backend_requests_total",
+				Help: "Total requests routed to each backend by status",
+			},
+			[]string{"backend_id", "status"},
+		),
+		BackendLatencySeconds: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "gateway_backend_latency_seconds",
+				Help:    "Request latency for each backend",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"backend_id"},
+		),
+		BackendInFlight: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "gateway_backend_in_flight",
+				Help: "Current in-flight requests for each backend",
+			},
+			[]string{"backend_id"},
+		),
+		BackendCircuitOpen: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "gateway_backend_circuit_open",
+				Help: "Circuit breaker status for each backend (1=open, 0=closed)",
+			},
+			[]string{"backend_id"},
 		),
 	}
 }

@@ -1,3 +1,14 @@
+# Multiple backend configuration
+backends:
+  - id: primary
+    url: http://localhost:8080
+    model: tinyllama
+    capacity: 8
+    timeout: 120s
+    max_retries: 1
+
+# Legacy single engine config (for backward compatibility)
+# If backends array is empty, this will be used
 engine:
   url: http://localhost:8080
   timeout: 120s
@@ -20,3 +31,7 @@ cost:
 server:
   port: 8000
   shutdown_timeout: 30s
+
+health:
+  check_interval: 10s
+  check_timeout: 5s

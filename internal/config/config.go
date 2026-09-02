@@ -10,14 +10,25 @@ import (
 
 // Config holds all gateway configuration
 type Config struct {
-	Engine    EngineConfig    `yaml:"engine"`
+	Backends  []BackendConfig `yaml:"backends"`  // Multiple backends
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	Cache     CacheConfig     `yaml:"cache"`
 	Cost      CostConfig      `yaml:"cost"`
 	Server    ServerConfig    `yaml:"server"`
+	Health    HealthConfig    `yaml:"health"`
 }
 
-// EngineConfig holds LLM engine connection settings
+// BackendConfig holds configuration for a single backend
+type BackendConfig struct {
+	ID       string        `yaml:"id"`
+	URL      string        `yaml:"url"`
+	Model    string        `yaml:"model"`
+	Capacity int           `yaml:"capacity"`
+	Timeout  time.Duration `yaml:"timeout"`
+	MaxRetries int         `yaml:"max_retries"`
+}
+
+// EngineConfig holds LLM engine connection settings (deprecated, use Backends)
 type EngineConfig struct {
 	URL         string        `yaml:"url"`
 	Timeout     time.Duration `yaml:"timeout"`
@@ -50,6 +61,12 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 }
 
+// HealthConfig holds health check settings
+type HealthConfig struct {
+	CheckInterval time.Duration `yaml:"check_interval"`
+	CheckTimeout  time.Duration `yaml:"check_timeout"`
+}
+
 // Load reads configuration from a YAML file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -63,12 +80,24 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Set defaults
-	if cfg.Engine.Timeout == 0 {
-		cfg.Engine.Timeout = 120 * time.Second
+	// Support legacy single engine config
+	if len(cfg.Backends) == 0 {
+		// Legacy format compatibility - will be added by main.go if Engine is set
 	}
-	if cfg.Engine.MaxRetries == 0 {
-		cfg.Engine.MaxRetries = 1
+	
+	// Backend defaults
+	for i := range cfg.Backends {
+		if cfg.Backends[i].Timeout == 0 {
+			cfg.Backends[i].Timeout = 120 * time.Second
+		}
+		if cfg.Backends[i].MaxRetries == 0 {
+			cfg.Backends[i].MaxRetries = 1
+		}
+		if cfg.Backends[i].Capacity == 0 {
+			cfg.Backends[i].Capacity = 8
+		}
 	}
+	
 	if cfg.Scheduler.MaxInFlight == 0 {
 		cfg.Scheduler.MaxInFlight = 8
 	}
@@ -92,6 +121,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Server.ShutdownTimeout == 0 {
 		cfg.Server.ShutdownTimeout = 30 * time.Second
+	}
+	if cfg.Health.CheckInterval == 0 {
+		cfg.Health.CheckInterval = 10 * time.Second
+	}
+	if cfg.Health.CheckTimeout == 0 {
+		cfg.Health.CheckTimeout = 5 * time.Second
 	}
 
 	return &cfg, nil
