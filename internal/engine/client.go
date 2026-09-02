@@ -181,3 +181,231 @@ func (c *Client) doRequest(ctx context.Context, path string, reqBody, respBody i
 
 	return fmt.Errorf("max retries exceeded: %w", lastErr)
 }
+
+// StreamChunk represents a single SSE chunk in a stream
+type StreamChunk struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content,omitempty"`
+			Role    string `json:"role,omitempty"`
+		} `json:"delta"`
+		Index        int    `json:"index"`
+		FinishReason string `json:"finish_reason,omitempty"`
+	} `json:"choices"`
+}
+
+// StreamCompletionChunk represents completion stream chunk
+type StreamCompletionChunk struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Text         string `json:"text"`
+		Index        int    `json:"index"`
+		FinishReason string `json:"finish_reason,omitempty"`
+	} `json:"choices"`
+}
+
+// CreateCompletionStream sends a streaming completion request
+func (c *Client) CreateCompletionStream(ctx context.Context, req *CompletionRequest) (<-chan StreamCompletionChunk, <-chan error) {
+	chunkChan := make(chan StreamCompletionChunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Ensure stream is enabled
+		req.Stream = true
+		jsonData, err := json.Marshal(req)
+		if err != nil {
+			errChan <- fmt.Errorf("marshaling request: %w", err)
+			return
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/completions", bytes.NewReader(jsonData))
+		if err != nil {
+			errChan <- fmt.Errorf("creating request: %w", err)
+			return
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", "text/event-stream")
+
+		httpResp, err := c.httpClient.Do(httpReq)
+		if err != nil {
+			errChan <- fmt.Errorf("sending request: %w", err)
+			return
+		}
+		defer httpResp.Body.Close()
+
+		if httpResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(httpResp.Body)
+			errChan <- fmt.Errorf("engine returned status %d: %s", httpResp.StatusCode, string(body))
+			return
+		}
+
+		// Read SSE stream
+		buffer := make([]byte, 4096)
+		var leftover []byte
+
+		for {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			default:
+			}
+
+			n, err := httpResp.Body.Read(buffer)
+			if n > 0 {
+				data := append(leftover, buffer[:n]...)
+				chunks, remaining := c.parseSSEChunks(data)
+				leftover = remaining
+
+				for _, chunk := range chunks {
+					if chunk == "[DONE]" {
+						return
+					}
+
+					var streamChunk StreamCompletionChunk
+					if err := json.Unmarshal([]byte(chunk), &streamChunk); err != nil {
+						continue // Skip malformed chunks
+					}
+
+					select {
+					case chunkChan <- streamChunk:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				errChan <- fmt.Errorf("reading stream: %w", err)
+				return
+			}
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
+// CreateChatCompletionStream sends a streaming chat completion request
+func (c *Client) CreateChatCompletionStream(ctx context.Context, req *ChatCompletionRequest) (<-chan StreamChunk, <-chan error) {
+	chunkChan := make(chan StreamChunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Ensure stream is enabled
+		req.Stream = true
+		jsonData, err := json.Marshal(req)
+		if err != nil {
+			errChan <- fmt.Errorf("marshaling request: %w", err)
+			return
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/chat/completions", bytes.NewReader(jsonData))
+		if err != nil {
+			errChan <- fmt.Errorf("creating request: %w", err)
+			return
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", "text/event-stream")
+
+		httpResp, err := c.httpClient.Do(httpReq)
+		if err != nil {
+			errChan <- fmt.Errorf("sending request: %w", err)
+			return
+		}
+		defer httpResp.Body.Close()
+
+		if httpResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(httpResp.Body)
+			errChan <- fmt.Errorf("engine returned status %d: %s", httpResp.StatusCode, string(body))
+			return
+		}
+
+		// Read SSE stream
+		buffer := make([]byte, 4096)
+		var leftover []byte
+
+		for {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			default:
+			}
+
+			n, err := httpResp.Body.Read(buffer)
+			if n > 0 {
+				data := append(leftover, buffer[:n]...)
+				chunks, remaining := c.parseSSEChunks(data)
+				leftover = remaining
+
+				for _, chunk := range chunks {
+					if chunk == "[DONE]" {
+						return
+					}
+
+					var streamChunk StreamChunk
+					if err := json.Unmarshal([]byte(chunk), &streamChunk); err != nil {
+						continue // Skip malformed chunks
+					}
+
+					select {
+					case chunkChan <- streamChunk:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				errChan <- fmt.Errorf("reading stream: %w", err)
+				return
+			}
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
+// parseSSEChunks parses Server-Sent Events format
+func (c *Client) parseSSEChunks(data []byte) (chunks []string, remaining []byte) {
+	lines := bytes.Split(data, []byte("\n\n"))
+	
+	// Last element might be incomplete
+	if len(lines) > 0 {
+		remaining = lines[len(lines)-1]
+		lines = lines[:len(lines)-1]
+	}
+
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+
+		// SSE format: "data: {json}\n\n"
+		if bytes.HasPrefix(line, []byte("data: ")) {
+			chunk := bytes.TrimPrefix(line, []byte("data: "))
+			chunks = append(chunks, string(bytes.TrimSpace(chunk)))
+		}
+	}
+
+	return chunks, remaining
+}

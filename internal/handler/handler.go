@@ -63,6 +63,12 @@ func (h *Handler) HandleCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if streaming is requested
+	if req.Stream {
+		h.HandleCompletionsStreaming(w, r, &req)
+		return
+	}
+
 	// Check cache
 	cacheKey := cache.HashRequest(req)
 	if cached, ok := h.cache.Get(cacheKey); ok {
@@ -170,6 +176,12 @@ func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
 		h.metrics.RejectedTotal.WithLabelValues("invalid_request").Inc()
+		return
+	}
+
+	// Check if streaming is requested
+	if req.Stream {
+		h.HandleChatCompletionsStreaming(w, r, &req)
 		return
 	}
 
