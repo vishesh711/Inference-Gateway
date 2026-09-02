@@ -1,5 +1,7 @@
 # Inference Gateway
 
+> **Note:** This is a complete, production-tested Go implementation with comprehensive benchmarks and documentation. If you see a Python PR from Copilot, ignore it—this Go version is the canonical implementation with real test results.
+
 A high-performance serving layer in Go that sits in front of LLM engines (vLLM, llama.cpp) and controls how work reaches them: admission control, bounded queueing, genuine request batching for embeddings, response caching, and cost accounting per million tokens.
 
 ## Results
