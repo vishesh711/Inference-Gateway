@@ -17,6 +17,9 @@ engine:
 scheduler:
   max_in_flight: 8
   queue_size: 100
+  # Token-aware admission control
+  token_capacity: 20000          # Total token budget (20K tokens)
+  use_token_scheduling: true     # Enable token-based scheduling
   embed_max_batch: 32
   embed_max_wait_ms: 20
 

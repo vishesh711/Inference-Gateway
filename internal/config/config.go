@@ -39,6 +39,8 @@ type EngineConfig struct {
 type SchedulerConfig struct {
 	MaxInFlight      int           `yaml:"max_in_flight"`
 	QueueSize        int           `yaml:"queue_size"`
+	TokenCapacity    int64         `yaml:"token_capacity"`      // Total token budget
+	UseTokenScheduling bool        `yaml:"use_token_scheduling"` // Enable token-based scheduling
 	EmbedMaxBatch    int           `yaml:"embed_max_batch"`
 	EmbedMaxWaitMs   int           `yaml:"embed_max_wait_ms"`
 }
@@ -103,6 +105,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Scheduler.QueueSize == 0 {
 		cfg.Scheduler.QueueSize = 100
+	}
+	if cfg.Scheduler.TokenCapacity == 0 {
+		cfg.Scheduler.TokenCapacity = 20000 // Default 20K tokens
 	}
 	if cfg.Scheduler.EmbedMaxBatch == 0 {
 		cfg.Scheduler.EmbedMaxBatch = 32

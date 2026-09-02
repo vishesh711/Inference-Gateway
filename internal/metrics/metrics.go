@@ -26,6 +26,11 @@ type Metrics struct {
 	BackendLatencySeconds    *prometheus.HistogramVec
 	BackendInFlight          *prometheus.GaugeVec
 	BackendCircuitOpen       *prometheus.GaugeVec
+	// Token budget metrics
+	TokenBudgetCapacity      prometheus.Gauge
+	TokenBudgetInUse         prometheus.Gauge
+	TokenBudgetUtilization   prometheus.Gauge
+	EstimatedTokensPerRequest prometheus.Histogram
 }
 
 // New creates and registers all metrics
@@ -152,6 +157,31 @@ func New() *Metrics {
 				Help: "Circuit breaker status for each backend (1=open, 0=closed)",
 			},
 			[]string{"backend_id"},
+		),
+		TokenBudgetCapacity: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "gateway_token_budget_capacity",
+				Help: "Total token budget capacity",
+			},
+		),
+		TokenBudgetInUse: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "gateway_token_budget_in_use",
+				Help: "Current tokens in use",
+			},
+		),
+		TokenBudgetUtilization: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "gateway_token_budget_utilization",
+				Help: "Token budget utilization percentage (0-100)",
+			},
+		),
+		EstimatedTokensPerRequest: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "gateway_estimated_tokens_per_request",
+				Help:    "Estimated token cost per request",
+				Buckets: []float64{10, 50, 100, 250, 500, 1000, 2000, 5000, 10000},
+			},
 		),
 	}
 }
