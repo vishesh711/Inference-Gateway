@@ -6,7 +6,7 @@ A high-performance serving layer in Go that sits in front of LLM engines (vLLM, 
 
 ## Results
 
-> **📊 Complete test results available in [TEST_RESULTS.md](TEST_RESULTS.md)**
+> **📊 Complete test results available in [TEST_RESULTS.md](docs/TEST_RESULTS.md)**
 
 **Performance benchmarks across concurrency levels** (Mock Engine on M1 Mac):
 
@@ -101,9 +101,9 @@ It does not implement fused CUDA kernels or KV cache optimization. The engine do
 
 ## Quick Start
 
-> **🚀 Want to test immediately?** See [TEST_NOW.md](TEST_NOW.md) - uses mock engine, no waiting!  
-> **📊 Want to see test results?** See [TEST_RESULTS.md](TEST_RESULTS.md) - comprehensive benchmark data  
-> **✅ Want the executive summary?** See [COMPLETE.md](COMPLETE.md) - project completion report
+> **🚀 Want to test immediately?** See [TEST_NOW.md](docs/development/TEST_NOW.md) - uses mock engine, no waiting!  
+> **📊 Want to see test results?** See [TEST_RESULTS.md](docs/TEST_RESULTS.md) - comprehensive benchmark data  
+> **✅ Want the executive summary?** See [COMPLETE.md](docs/COMPLETE.md) - project completion report
 
 ### Prerequisites
 - Go 1.21+
