@@ -1,0 +1,95 @@
+Benchmark Results - Mock Engine
+================================
+
+Concurrency: 1
+LOAD TEST RESULTS
+======================================================================
+Duration (post-warmup): 15s
+Total Requests:         373224
+Successful:             373224 (100.0%)
+Failed:                 0
+----------------------------------------------------------------------
+Throughput:             24881.48 req/s
+Tokens/sec:             398103.62 tok/s
+----------------------------------------------------------------------
+Latency Mean:           0s
+Latency p50:            0s
+Latency p90:            0s
+Latency p95:            0s
+Latency p99:            0s
+Latency Min:            0s
+
+Concurrency: 2
+LOAD TEST RESULTS
+======================================================================
+Duration (post-warmup): 15s
+Total Requests:         665787
+Successful:             665787 (100.0%)
+Failed:                 0
+----------------------------------------------------------------------
+Throughput:             44385.73 req/s
+Tokens/sec:             710171.75 tok/s
+----------------------------------------------------------------------
+Latency Mean:           0s
+Latency p50:            0s
+Latency p90:            0s
+Latency p95:            0s
+Latency p99:            0s
+Latency Min:            0s
+
+Concurrency: 4
+LOAD TEST RESULTS
+======================================================================
+Duration (post-warmup): 15s
+Total Requests:         63122
+Successful:             63034 (99.9%)
+Failed:                 88
+----------------------------------------------------------------------
+Throughput:             4200.59 req/s
+Tokens/sec:             67209.42 tok/s
+----------------------------------------------------------------------
+Latency Mean:           1ms
+Latency p50:            0s
+Latency p90:            3ms
+Latency p95:            6ms
+Latency p99:            9ms
+Latency Min:            0s
+
+Concurrency: 8
+
+Concurrency: 16
+LOAD TEST RESULTS
+======================================================================
+Duration (post-warmup): 15s
+Total Requests:         52706
+Successful:             50773 (96.3%)
+Failed:                 1933
+----------------------------------------------------------------------
+Throughput:             3382.13 req/s
+Tokens/sec:             64260.54 tok/s
+----------------------------------------------------------------------
+Latency Mean:           4ms
+Latency p50:            0s
+Latency p90:            8ms
+Latency p95:            15ms
+Latency p99:            124ms
+Latency Min:            0s
+
+Concurrency: 32
+LOAD TEST RESULTS
+======================================================================
+Duration (post-warmup): 15s
+Total Requests:         30656
+Successful:             29774 (97.1%)
+Failed:                 882
+----------------------------------------------------------------------
+Throughput:             1984.20 req/s
+Tokens/sec:             32548.78 tok/s
+----------------------------------------------------------------------
+Latency Mean:           16ms
+Latency p50:            10ms
+Latency p90:            24ms
+Latency p95:            31ms
+Latency p99:            56ms
+Latency Min:            0s
+

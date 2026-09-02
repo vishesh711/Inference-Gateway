@@ -1,0 +1,22 @@
+engine:
+  url: http://localhost:8080
+  timeout: 120s
+  max_retries: 1
+
+scheduler:
+  max_in_flight: 8
+  queue_size: 100
+  embed_max_batch: 32
+  embed_max_wait_ms: 20
+
+cache:
+  enabled: true
+  max_entries: 1000
+  ttl: 300s
+
+cost:
+  gpu_hourly_rate: 0.00  # 0 for local CPU; set for GPU runs
+
+server:
+  port: 8000
+  shutdown_timeout: 30s
