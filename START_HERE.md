@@ -1,28 +1,21 @@
 # Inference Gateway — Start Here
 
-**Distributed LLM inference platform in Go with token-aware scheduling, SSE streaming, and multi-backend routing.**
+**LLM serving gateway in Go with token-aware admission control.**
 
 ---
 
 ## 🎯 What is This?
 
-A Go-based **distributed platform** that sits in front of multiple LLM inference engines (vLLM, llama.cpp) and provides:
+An LLM serving gateway featuring **token-aware scheduling** (the key LLM-specific insight): requests consume scheduler budget proportional to estimated token cost rather than counting as one slot each, because a 50-token and a 2000-token completion tie up the engine for very different durations.
 
-### Phase 1 Features (Distributed Platform) ✨
-- **Token-aware scheduling** — Schedule by GPU work (tokens), not request count
-- **Multi-backend routing** — Weighted load balancing with health checks
-- **Circuit breakers** — 3-strike open/close for fault tolerance
-- **SSE streaming** — Token-by-token with TTFT/TPOT metrics
-- **23 Prometheus metrics** — Comprehensive observability
+Also includes:
+- **Admission control** — Bounded queue prevents timeout cascades
+- **Request batching** — Embeddings coalescing with correct timer logic
+- **Multi-backend routing** — Weighted selection with circuit breakers
+- **SSE streaming** — TTFT and TPOT metrics
+- **23 Prometheus metrics** — Histograms, not averages
 
-### Core Features (MVP)
-- **Admission control** — Bounded queues prevent timeout cascades
-- **Concurrency limiting** — Semaphore-based scheduling
-- **Request batching** — Embeddings coalescing at gateway layer
-- **Response caching** — LRU + TTL for repeated requests
-- **Cost tracking** — Token accounting and $/M tokens
-
-**Benchmark highlights:** 44K req/s peak, 97% success at 32× overload, 67% cache hit rate
+**Status:** ✅ Functional tests pass, ⏳ performance benchmarks pending (see BENCHMARK_STATUS.md)
 
 ---
 
@@ -31,10 +24,10 @@ A Go-based **distributed platform** that sits in front of multiple LLM inference
 ### 🎤 **For Interviews & Portfolio**
 Start here if showing this to recruiters or preparing for interviews:
 
-- **[docs/interview/PROJECT_SUMMARY.md](docs/interview/PROJECT_SUMMARY.md)** — Complete project overview (one file, everything)
-- **[docs/interview/INTERVIEW_GUIDE.md](docs/interview/INTERVIEW_GUIDE.md)** — 1,100+ lines, 30+ Q&A, comprehensive MVP prep
-- **[docs/interview/PHASE1_INTERVIEW_ADDITIONS.md](docs/interview/PHASE1_INTERVIEW_ADDITIONS.md)** ✨ — Phase 1 features (token scheduling, routing, streaming)
-- **[docs/interview/START_HERE_INTERVIEW.md](docs/interview/START_HERE_INTERVIEW.md)** — Quick prep guide (5min/30min/2hr paths)
+- **[docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)** ⭐ — **Use this one** (corrected, no invalid claims)
+- **[docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)** — Current testing status and real benchmark plan
+- **[docs/interview/PHASE1_INTERVIEW_ADDITIONS.md](docs/interview/PHASE1_INTERVIEW_ADDITIONS.md)** — Phase 1 deep-dive
+- ~~[docs/interview/INTERVIEW_GUIDE.md](docs/interview/INTERVIEW_GUIDE.md)~~ — Being updated, use CORRECTED version
 
 ### 🚀 **For Using/Testing**
 Start here if you want to run the gateway:
@@ -75,8 +68,8 @@ Background on the Copilot PR situation:
 ## ⚡ Quick Links by Use Case
 
 ### "I want to understand what you built" (5 minutes)
-1. Read [docs/PHASE1_COMPLETE.md](docs/PHASE1_COMPLETE.md) — Phase 1 summary
-2. Read [docs/interview/PROJECT_SUMMARY.md](docs/interview/PROJECT_SUMMARY.md) — Full overview
+1. Read [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md) — Current status
+2. Read [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md) — One-minute pitch + bullets
 3. Look at [README.md](README.md) — Architecture section
 
 ### "I want to run it right now" (10 minutes)
@@ -91,15 +84,14 @@ curl http://localhost:8000/v1/completions    # Terminal 4
 ```
 
 ### "I'm preparing for an interview" (30-120 minutes)
-1. Read [docs/interview/START_HERE_INTERVIEW.md](docs/interview/START_HERE_INTERVIEW.md)
-2. Review [docs/interview/INTERVIEW_GUIDE.md](docs/interview/INTERVIEW_GUIDE.md) — MVP features
-3. Review [docs/interview/PHASE1_INTERVIEW_ADDITIONS.md](docs/interview/PHASE1_INTERVIEW_ADDITIONS.md) — Distributed features
-4. Practice one-minute pitch (updated for Phase 1)
+1. Read [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)
+2. Review [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)
+3. Practice the one-minute pitch (lead with token-aware scheduling)
 
 ### "I want to see the test data" (15 minutes)
-1. Read [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md) — MVP benchmarks
-2. Read [docs/PHASE1_INTEGRATION_COMPLETE.md](docs/PHASE1_INTEGRATION_COMPLETE.md) — Phase 1 status
-3. Check [benchmark_results.txt](benchmark_results.txt)
+1. Read [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md) — Why mock benchmarks are invalid
+2. Read [docs/FIXES_NEEDED.md](docs/FIXES_NEEDED.md) — What's being corrected
+3. ~~[docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)~~ — Mock results, being superseded
 
 ### "I want to extend this project" (30 minutes)
 1. Read [docs/development/ROADMAP.md](docs/development/ROADMAP.md)
@@ -107,26 +99,25 @@ curl http://localhost:8000/v1/completions    # Terminal 4
 
 ---
 
-## 🎯 Key Results (All Measured)
+## 🎯 What's Been Validated
 
-### MVP Benchmarks
-| Metric | Value |
-|--------|-------|
-| Peak throughput | **44,386 req/s** |
-| Success at overload | **97%** (32× optimal) |
-| Cache hit rate | **67%** |
-| Features tested | **10/10** |
-| Bugs found | **0** (vs Copilot's 9) |
-| p95 latency | **<1ms** |
+### ✅ Functional Tests (All Pass)
+- Admission control: Queue full → 429 rejection
+- Cache: Hit and miss paths work correctly
+- Context cancellation: Client disconnect frees slot
+- Graceful shutdown: In-flight work completes
+- Metrics: All 23 metrics export correctly
+- Streaming: SSE format and TTFT/TPOT tracking
+- Multi-backend: Router selects backends, circuit breakers open/close
+- Token scheduling: Budget acquire/release works
 
-### Phase 1 Additions ✨
-| Metric | Value |
-|--------|-------|
-| New features | **3** (streaming, routing, token scheduling) |
-| New metrics | **13** (23 total) |
-| New code | **~1,336 lines** |
-| Build status | **✅ All packages compile** |
-| Documentation | **+1,378 lines** |
+### ⏳ Performance Benchmarks (Pending)
+- Mock benchmarks invalid (see [BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md))
+- Need real llama.cpp benchmarks (~4 hours work)
+- Will measure concurrency knee
+- Will measure embeddings batching improvement
+
+**No performance numbers on resume until real benchmarks complete.**
 
 ---
 
@@ -195,27 +186,29 @@ Client → Handler → Cache → Admission Queue
 
 ---
 
-## 🎤 The Updated One-Minute Pitch
+## 🎤 The One-Minute Pitch
 
-> "I built a **distributed LLM inference platform** in Go with token-aware admission control, SSE streaming, and multi-backend routing. The system uses estimated token budgets for scheduling—a 4,000-token request consumes proportionally more of the 20,000-token capacity than a 50-token request, so scheduling reflects actual GPU work instead of just request count.
+> "I built an LLM serving gateway in Go. The core problem is that clients submit faster than a GPU can serve, and the naive fix—an unbounded queue—turns a capacity problem into a latency disaster where everything times out while the server keeps working.
 >
-> I implemented circuit breakers that open after 3 consecutive backend failures, weighted routing that considers both current load and recent p95 latency, and **comprehensive observability** with **23 Prometheus metrics** including **TTFT (time to first token)** and **TPOT (time per output token)**.
+> So admission is bounded and rejects with 429 immediately. But the piece I'd point at is **token-aware scheduling**: requests consume budget proportional to estimated token cost rather than counting as one slot each, because a 50-token and a 2000-token completion tie up the engine for very different lengths of time.
 >
-> The core MVP handles 44,000 req/s with 97% success at 32× overload. Phase 1 adds **distributed systems patterns** (fault tolerance, health checks, load balancing) and **LLM-specific optimization** (token-aware scheduling). GitHub Copilot created a Python PR and found 9 bugs in its own review—my Go implementation has zero."
+> I also implemented request coalescing for embeddings, where the batch timer starts on the first arrival rather than every arrival, since resetting per-arrival means a steady trickle never dispatches.
+>
+> Everything is instrumented with histograms rather than averages, separating queue wait from generation time so you can tell a backlog from slow inference. I've verified the control paths functionally. I still need to benchmark against a real engine, since my current numbers came from a mock responding in microseconds and aren't meaningful."
 
 ---
 
 ## ✅ Project Status
 
-**MVP:** ✅ Complete, tested, documented  
-**Phase 1:** ✅ Implemented, integrated, builds successfully  
-**Testing:** ⏳ Ready for multi-backend testing  
-**Documentation:** ✅ 25 files, 8,099+ lines  
-**Interview Ready:** ✅ Comprehensive prep for distributed systems & LLM optimization  
+**Code:** ✅ Complete, builds successfully  
+**Functional Tests:** ✅ All verified  
+**Performance Tests:** ⏳ Pending real benchmarks (see BENCHMARK_STATUS.md)  
+**Documentation:** ✅ Corrected, honest about limitations  
+**Interview Ready:** ✅ Lead with token-aware scheduling + design reasoning  
 
 ---
 
 **Quick start:**
-1. **For interviews:** [docs/interview/PHASE1_INTERVIEW_ADDITIONS.md](docs/interview/PHASE1_INTERVIEW_ADDITIONS.md)
-2. **For overview:** [docs/PHASE1_COMPLETE.md](docs/PHASE1_COMPLETE.md)
-3. **For MVP details:** [docs/interview/PROJECT_SUMMARY.md](docs/interview/PROJECT_SUMMARY.md)
+1. **For interviews:** [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)
+2. **For status:** [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)
+3. **For testing plan:** [docs/FIXES_NEEDED.md](docs/FIXES_NEEDED.md)
