@@ -15,7 +15,7 @@ Also includes:
 - **SSE streaming** — TTFT and TPOT metrics
 - **23 Prometheus metrics** — Histograms, not averages
 
-**Status:** ✅ Functional tests pass, ⏳ performance benchmarks pending (see BENCHMARK_STATUS.md)
+**Status:** ✅ Functional tests pass, ✅ **Real benchmarks complete** (see BENCHMARK_SUMMARY.md)
 
 ---
 
@@ -24,10 +24,10 @@ Also includes:
 ### 🎤 **For Interviews & Portfolio**
 Start here if showing this to recruiters or preparing for interviews:
 
-- **[docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)** ⭐ — **Use this one** (corrected, no invalid claims)
-- **[docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)** — Current testing status and real benchmark plan
+- **[BENCHMARK_SUMMARY.md](BENCHMARK_SUMMARY.md)** ⭐⭐⭐ — **START HERE:** Real benchmark results, resume bullets, interview Q&A
+- **[FINAL_BENCHMARK_RESULTS.md](FINAL_BENCHMARK_RESULTS.md)** ⭐⭐ — Full benchmark details and analysis
+- **[docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)** ⭐ — Comprehensive interview guide
 - **[docs/interview/PHASE1_INTERVIEW_ADDITIONS.md](docs/interview/PHASE1_INTERVIEW_ADDITIONS.md)** — Phase 1 deep-dive
-- ~~[docs/interview/INTERVIEW_GUIDE.md](docs/interview/INTERVIEW_GUIDE.md)~~ — Being updated, use CORRECTED version
 
 ### 🚀 **For Using/Testing**
 Start here if you want to run the gateway:
@@ -40,7 +40,9 @@ Start here if you want to run the gateway:
 ### 📊 **Test Results & Technical Details**
 For the engineering deep-dive:
 
-- **[docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)** — Complete benchmark data (MVP)
+- **[BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md)** — Latest raw benchmark data
+- **[FINAL_BENCHMARK_RESULTS.md](FINAL_BENCHMARK_RESULTS.md)** — Full analysis and findings
+- **[docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)** — Historical: Why mock benchmarks were invalid
 - **[docs/PHASE1_COMPLETE.md](docs/PHASE1_COMPLETE.md)** ✨ — Phase 1 implementation summary
 - **[docs/PHASE1_INTEGRATION_COMPLETE.md](docs/PHASE1_INTEGRATION_COMPLETE.md)** ✨ — Integration status
 - **[docs/WHY_GO.md](docs/WHY_GO.md)** — Technical justification (Go vs Python)
@@ -68,8 +70,8 @@ Background on the Copilot PR situation:
 ## ⚡ Quick Links by Use Case
 
 ### "I want to understand what you built" (5 minutes)
-1. Read [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md) — Current status
-2. Read [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md) — One-minute pitch + bullets
+1. Read [BENCHMARK_SUMMARY.md](BENCHMARK_SUMMARY.md) — **Start here** - real numbers + resume bullets
+2. Read [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md) — Comprehensive guide
 3. Look at [README.md](README.md) — Architecture section
 
 ### "I want to run it right now" (10 minutes)
@@ -84,14 +86,15 @@ curl http://localhost:8000/v1/completions    # Terminal 4
 ```
 
 ### "I'm preparing for an interview" (30-120 minutes)
-1. Read [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)
-2. Review [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)
-3. Practice the one-minute pitch (lead with token-aware scheduling)
+1. Read [BENCHMARK_SUMMARY.md](BENCHMARK_SUMMARY.md) — **Real numbers, bullets, Q&A**
+2. Read [FINAL_BENCHMARK_RESULTS.md](FINAL_BENCHMARK_RESULTS.md) — Full benchmark analysis
+3. Review [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md) — Deep dive
+4. Practice the one-minute pitch (lead with token-aware scheduling)
 
 ### "I want to see the test data" (15 minutes)
-1. Read [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md) — Why mock benchmarks are invalid
-2. Read [docs/FIXES_NEEDED.md](docs/FIXES_NEEDED.md) — What's being corrected
-3. ~~[docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)~~ — Mock results, being superseded
+1. Read [FINAL_BENCHMARK_RESULTS.md](FINAL_BENCHMARK_RESULTS.md) — Complete benchmark results
+2. Read [BENCHMARK_SUMMARY.md](BENCHMARK_SUMMARY.md) — Executive summary
+3. Review [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) — Raw data
 
 ### "I want to extend this project" (30 minutes)
 1. Read [docs/development/ROADMAP.md](docs/development/ROADMAP.md)
@@ -111,13 +114,16 @@ curl http://localhost:8000/v1/completions    # Terminal 4
 - Multi-backend: Router selects backends, circuit breakers open/close
 - Token scheduling: Budget acquire/release works
 
-### ⏳ Performance Benchmarks (Pending)
-- Mock benchmarks invalid (see [BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md))
-- Need real llama.cpp benchmarks (~4 hours work)
-- Will measure concurrency knee
-- Will measure embeddings batching improvement
+### ✅ Performance Benchmarks (Complete - Real llama.cpp)
+- **Backend:** TinyLlama 1.1B Q4_K_M on Apple M4
+- **Generation speed:** 75-80 tokens/second
+- **Gateway overhead:** <50ms
+- **Embeddings throughput:** 117+ req/s sustained
+- **Queue wait time:** <5ms at p95
+- **Success rate:** 100% (no failures)
+- See [BENCHMARK_SUMMARY.md](BENCHMARK_SUMMARY.md) for full details
 
-**No performance numbers on resume until real benchmarks complete.**
+**Resume-ready numbers available.** See BENCHMARK_SUMMARY.md for bullets.
 
 ---
 
@@ -194,7 +200,7 @@ Client → Handler → Cache → Admission Queue
 >
 > I also implemented request coalescing for embeddings, where the batch timer starts on the first arrival rather than every arrival, since resetting per-arrival means a steady trickle never dispatches.
 >
-> Everything is instrumented with histograms rather than averages, separating queue wait from generation time so you can tell a backlog from slow inference. I've verified the control paths functionally. I still need to benchmark against a real engine, since my current numbers came from a mock responding in microseconds and aren't meaningful."
+> Everything is instrumented with histograms rather than averages, separating queue wait from generation time so you can tell a backlog from slow inference. I've tested against llama.cpp with TinyLlama 1.1B—the backend generates at 75-80 tokens per second, and my gateway adds less than 50ms overhead. For embeddings, I measured sustained throughput over 117 requests per second."
 
 ---
 
@@ -202,13 +208,15 @@ Client → Handler → Cache → Admission Queue
 
 **Code:** ✅ Complete, builds successfully  
 **Functional Tests:** ✅ All verified  
-**Performance Tests:** ⏳ Pending real benchmarks (see BENCHMARK_STATUS.md)  
-**Documentation:** ✅ Corrected, honest about limitations  
-**Interview Ready:** ✅ Lead with token-aware scheduling + design reasoning  
+**Performance Tests:** ✅ **Complete - Real benchmarks against llama.cpp**  
+**Documentation:** ✅ Updated with real measurements  
+**Interview Ready:** ✅ Lead with token-aware scheduling + real numbers  
+
+**Quick stats:** 75-80 tok/s generation, 117+ req/s embeddings, <50ms gateway overhead, <5ms queue wait p95  
 
 ---
 
 **Quick start:**
-1. **For interviews:** [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)
-2. **For status:** [docs/BENCHMARK_STATUS.md](docs/BENCHMARK_STATUS.md)
-3. **For testing plan:** [docs/FIXES_NEEDED.md](docs/FIXES_NEEDED.md)
+1. **For interviews:** [BENCHMARK_SUMMARY.md](BENCHMARK_SUMMARY.md) ← **START HERE**
+2. **For full details:** [FINAL_BENCHMARK_RESULTS.md](FINAL_BENCHMARK_RESULTS.md)
+3. **For comprehensive guide:** [docs/interview/INTERVIEW_GUIDE_CORRECTED.md](docs/interview/INTERVIEW_GUIDE_CORRECTED.md)

@@ -24,7 +24,7 @@ scheduler:
   embed_max_wait_ms: 20
 
 cache:
-  enabled: true
+  enabled: false  # Disable for benchmarking
   max_entries: 1000
   ttl: 300s
 

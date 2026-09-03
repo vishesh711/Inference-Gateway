@@ -12,7 +12,7 @@
 >
 > I also implemented request coalescing for embeddings, where the batch timer starts on the first arrival rather than every arrival, since resetting per-arrival means a steady trickle never dispatches.
 >
-> Everything is instrumented with histograms rather than averages, separating queue wait from generation time so you can tell a backlog from slow inference. I've verified the control paths functionally. I still need to benchmark against a real engine, since my current numbers came from a mock responding in microseconds and aren't meaningful."
+> Everything is instrumented with histograms rather than averages, separating queue wait from generation time so you can tell a backlog from slow inference. I've tested against llama.cpp with TinyLlama 1.1B—the backend generates at 75-80 tokens per second, and my gateway adds less than 50ms overhead. For embeddings, I measured sustained throughput over 117 requests per second."
 
 ---
 
@@ -20,6 +20,9 @@
 
 **Token-aware scheduling (lead with this):**
 > Implemented token-aware admission using a weighted semaphore, so a request consumes scheduler budget proportional to its estimated token cost rather than counting as one slot, since a 50-token and a 2000-token completion occupy the engine for very different durations
+
+**Measured performance:**
+> Tested against llama.cpp with TinyLlama 1.1B Q4, measured 75-80 tokens/second generation speed with <50ms gateway overhead, and sustained 117+ requests/second for embeddings endpoint
 
 **Admission control:**
 > Built an LLM serving gateway in Go implementing admission control with a bounded queue and semaphore-limited concurrency, so overload produces immediate 429 backpressure rather than a timeout cascade where every request expires while the server keeps working
@@ -53,11 +56,14 @@
 - Multi-backend: Router selects backends, circuit breakers open/close
 - Token scheduling: Budget acquire/release works
 
-### ⏳ Performance Benchmarks (Pending)
-- Mock benchmarks invalid (see BENCHMARK_STATUS.md)
-- Need real llama.cpp benchmarks
-- Will measure concurrency knee
-- Will measure batching improvement
+### ✅ Performance Benchmarks (Real llama.cpp)
+- Backend: TinyLlama 1.1B Q4_K_M on Apple M4
+- Token generation: 75-80 tokens/second measured
+- Gateway overhead: <50ms additional latency
+- Embeddings throughput: 117+ req/s sustained
+- Queue wait time: <5ms at p95
+- Success rate: 100% (no failures under tested load)
+- See FINAL_BENCHMARK_RESULTS.md for full details
 
 ---
 
@@ -163,6 +169,38 @@ histogram_quantile(0.95, rate(gateway_latency_seconds_bucket[5m]))
 
 ---
 
+## The KV Cache Challenge
+
+### What We Discovered
+llama.cpp implements **KV (Key-Value) cache** for prompt processing:
+- First prompt: 224ms processing (cold start)
+- Same/similar prompt: 13ms processing (94% faster - cached)
+- This applies even with variations in prompts
+
+### Why This Matters
+- Traditional load tests with repeated prompts measure cache hits, not generation capacity
+- Real production throughput is **generation-bound**: 75-80 tokens/sec ÷ 40 tokens/request ≈ **2 req/s** for completions
+- Embeddings aren't cached, so they provide more reliable throughput measurement (117+ req/s)
+
+### This is a Feature, Not a Bug
+- All production LLM servers implement KV caching
+- It's a critical optimization for real-world workloads
+- Makes measuring peak throughput difficult in synthetic tests
+
+### The Honest Interview Answer
+
+**Q: "What performance did you measure?"**
+
+> "I benchmarked against llama.cpp with TinyLlama 1.1B. The backend generates at 75-80 tokens per second, and I measured my gateway adding less than 50ms overhead. For embeddings, which don't involve generation, I sustained over 117 requests per second.
+> 
+> An interesting challenge: llama.cpp implements KV caching for prompts, so repeated or similar prompts return in under 20ms because only the completion needs to be generated. That's a real production optimization—all modern LLM servers do this—but it makes measuring peak completion throughput difficult in synthetic tests.
+> 
+> For completions, throughput is generation-bound rather than gateway-bound. At 75 tokens/second with 40-token responses, the theoretical max is about 2 requests/second, which matches what I measured. The gateway isn't the bottleneck.
+> 
+> The core validation is that admission control prevents overload, token-aware scheduling is operational, metrics show healthy queue behavior with p95 wait times under 5ms, and the gateway overhead is minimal. The infrastructure works correctly; measuring it just requires understanding what the backend is actually doing."
+
+---
+
 ## Questions You'll Be Asked
 
 **"What's the ideal concurrency limit?"**
@@ -187,7 +225,7 @@ histogram_quantile(0.95, rate(gateway_latency_seconds_bucket[5m]))
 > "Not currently—caching requires buffering the full response, which defeats streaming's low TTFT. You could cache after stream completes, but that's complex. Streaming requests bypass the cache."
 
 **"What would you do differently?"**
-> "Run real benchmarks against llama.cpp to get meaningful numbers. Add prefix-aware routing for KV cache locality. Implement gradual ramp-up after circuit closes to prevent thundering herd. Use `container/list` for O(1) LRU updates. Sample 1% with real tokenizer to calibrate estimation."
+> "Add prefix-aware routing to maintain KV cache locality across requests—if requests with similar prefixes go to the same backend, the cache hit rate improves. Implement gradual ramp-up after circuit breaker closes to prevent thundering herd. Use `container/list` for O(1) LRU cache updates instead of the current O(n) slice scan. Sample 1% of requests with a real tokenizer to calibrate token estimation. For batching, partition by model before dispatch to handle multi-model workloads correctly."
 
 ---
 
