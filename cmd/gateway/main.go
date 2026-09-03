@@ -241,7 +241,7 @@ func main() {
 		}
 	})
 
-	// Setup HTTP routes
+	// Setup HTTP routes with CORS middleware
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/completions", h.HandleCompletions)
 	mux.HandleFunc("/v1/chat/completions", h.HandleChatCompletions)
@@ -249,13 +249,35 @@ func main() {
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "OK")
+		fmt.Fprintf(w, `{"status":"ok"}`)
 	})
 
-	// Create HTTP server
+	// CORS middleware
+	corsMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Allow requests from frontend
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+			
+			// Handle preflight
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	// Create HTTP server with CORS
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: mux,
+		Handler: corsMiddleware(mux),
 	}
 
 	// Start server in background
