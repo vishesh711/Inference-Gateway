@@ -51,7 +51,8 @@ export default function Home() {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const response = await axios.get('/api/v1/health')
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
+        const response = await axios.get(`${apiUrl.replace('/v1', '')}/health`)
         // Parse metrics from health check or metrics endpoint
       } catch (error) {
         console.error('Failed to fetch metrics:', error)
@@ -77,10 +78,13 @@ export default function Home() {
 
     const startTime = Date.now()
 
+    // Use environment variable for API URL
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
+
     try {
       if (streaming) {
         // Streaming response
-        const response = await fetch('/api/v1/chat/completions', {
+        const response = await fetch(`${apiUrl}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -154,7 +158,7 @@ export default function Home() {
 
       } else {
         // Non-streaming response
-        const response = await axios.post('/api/v1/completions', {
+        const response = await axios.post(`${apiUrl}/completions`, {
           model: 'tinyllama',
           prompt: input,
           max_tokens: maxTokens,
