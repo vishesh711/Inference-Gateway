@@ -65,10 +65,35 @@ func main() {
 
 	// Initialize components
 	admission := scheduler.NewAdmissionController(cfg.Scheduler.QueueSize)
-	sched := scheduler.NewScheduler(int64(cfg.Scheduler.MaxInFlight))
+	
+	// Use HybridScheduler for token-aware admission control
+	var hybridScheduler *scheduler.HybridScheduler
+	if cfg.Scheduler.UseTokenScheduling {
+		log.Printf("Using token-aware scheduling: capacity=%d tokens", cfg.Scheduler.TokenCapacity)
+		hybridScheduler = scheduler.NewHybridScheduler(
+			cfg.Scheduler.TokenCapacity,
+			int64(cfg.Scheduler.MaxInFlight),
+			true, // use token scheduling
+		)
+	} else {
+		log.Printf("Using request-based scheduling: max_in_flight=%d", cfg.Scheduler.MaxInFlight)
+		hybridScheduler = scheduler.NewHybridScheduler(
+			cfg.Scheduler.TokenCapacity,
+			int64(cfg.Scheduler.MaxInFlight),
+			false, // use request-based
+		)
+	}
+	
 	cacheInstance := cache.New(cfg.Cache.Enabled, cfg.Cache.MaxEntries, cfg.Cache.TTL)
 	metricsInstance := metrics.New()
 	accountant := cost.New(cfg.Cost.GPUHourlyRate)
+	
+	// Create a default engine client for embeddings batcher (uses first backend)
+	var embeddingClient *engine.Client
+	if len(cfg.Backends) > 0 {
+		firstBackend := cfg.Backends[0]
+		embeddingClient = engine.NewClient(firstBackend.URL, firstBackend.Timeout, firstBackend.MaxRetries)
+	}
 	batcher := scheduler.NewEmbeddingBatcher(cfg.Scheduler.EmbedMaxBatch, cfg.Scheduler.EmbedMaxWaitMs)
 
 	log.Printf("Cost tracking: GPU hourly rate = $%.2f", cfg.Cost.GPUHourlyRate)
@@ -104,32 +129,44 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			for _, be := range registry.GetAll() {
-				be.mu.RLock()
-				if be.Status == backend.StatusHealthy {
+				if be.IsHealthy() {
 					metricsInstance.BackendHealth.WithLabelValues(be.ID, "healthy").Set(1)
 				} else {
 					metricsInstance.BackendHealth.WithLabelValues(be.ID, "unhealthy").Set(0)
 				}
-				metricsInstance.BackendInFlight.WithLabelValues(be.ID).Set(float64(be.CurrentLoad))
-				if be.CircuitOpen {
+				metricsInstance.BackendInFlight.WithLabelValues(be.ID).Set(float64(be.GetLoad()))
+				// Check circuit state - need to add getter
+				if be.IsCircuitOpen() {
 					metricsInstance.BackendCircuitOpen.WithLabelValues(be.ID).Set(1)
 				} else {
 					metricsInstance.BackendCircuitOpen.WithLabelValues(be.ID).Set(0)
 				}
-				be.mu.RUnlock()
 			}
 		}
 	}()
+	
+	// Update token budget metrics if token scheduling is enabled
+	if cfg.Scheduler.UseTokenScheduling {
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				metricsInstance.TokenBudgetCapacity.Set(float64(hybridScheduler.GetStats()["capacity"].(int64)))
+				metricsInstance.TokenBudgetInUse.Set(float64(hybridScheduler.GetStats()["in_use"].(int64)))
+				metricsInstance.TokenBudgetUtilization.Set(hybridScheduler.GetStats()["utilization"].(float64))
+			}
+		}()
+	}
 
-	// Create handler
+	// Create handler with router
 	h := handler.New(
-		engineClient,
+		router,
 		admission,
-		sched,
+		hybridScheduler,
 		cacheInstance,
 		metricsInstance,
 		accountant,
-		cfg.Engine.Timeout,
+		120*time.Second, // Default timeout
 	)
 	h.SetBatcher(batcher)
 
@@ -149,7 +186,7 @@ func main() {
 		}
 
 		// Call engine once for the entire batch
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.Engine.Timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
 		batchReq := &engine.EmbeddingRequest{
@@ -157,7 +194,7 @@ func main() {
 			Input: allInputs,
 		}
 
-		resp, err := engineClient.CreateEmbedding(ctx, batchReq)
+		resp, err := embeddingClient.CreateEmbedding(ctx, batchReq)
 
 		// Distribute results back to individual requests
 		if err != nil {

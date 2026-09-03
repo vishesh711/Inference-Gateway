@@ -167,6 +167,33 @@ func (hs *HybridScheduler) ReleaseWithCost(requestID string) {
 	}
 }
 
+// Acquire acquires admission with default cost (for backward compatibility)
+func (hs *HybridScheduler) Acquire(ctx context.Context) error {
+	if hs.useTokens {
+		// Use a default cost for simple acquire
+		return hs.tokenBudget.Acquire(ctx, "simple", 100) // 100 token default
+	}
+	return hs.reqScheduler.Acquire(ctx)
+}
+
+// Release releases admission (for backward compatibility)
+func (hs *HybridScheduler) Release() {
+	if hs.useTokens {
+		hs.tokenBudget.Release("simple")
+	} else {
+		hs.reqScheduler.Release()
+	}
+}
+
+// InFlight returns current in-flight count
+func (hs *HybridScheduler) InFlight() int64 {
+	if hs.useTokens {
+		// Return token usage as "in-flight" metric
+		return hs.tokenBudget.InUse()
+	}
+	return hs.reqScheduler.InFlight()
+}
+
 // GetStats returns current scheduling stats
 func (hs *HybridScheduler) GetStats() map[string]interface{} {
 	if hs.useTokens {

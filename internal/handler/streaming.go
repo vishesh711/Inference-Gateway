@@ -63,7 +63,11 @@ func (h *Handler) HandleCompletionsStreaming(w http.ResponseWriter, r *http.Requ
 	var tokenCount int
 	var promptTokens, completionTokens int
 
-	chunkChan, errChan := h.engine.CreateCompletionStream(admitReq.Ctx, req)
+	chunkChan, errChan, backend, err := h.router.RouteCompletionStream(admitReq.Ctx, req)
+	if err != nil {
+		h.writeSSEError(w, flusher, "Routing error: "+err.Error(), 500)
+		return
+	}
 
 	for {
 		select {
@@ -83,6 +87,9 @@ func (h *Handler) HandleCompletionsStreaming(w http.ResponseWriter, r *http.Requ
 				h.metrics.TokensTotal.WithLabelValues("prompt").Add(float64(promptTokens))
 				h.metrics.TokensTotal.WithLabelValues("completion").Add(float64(completionTokens))
 				h.metrics.RequestsTotal.WithLabelValues(req.Model, "success").Inc()
+				if backend != nil {
+					h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "success").Inc()
+				}
 				h.accountant.RecordTokens(promptTokens, completionTokens)
 
 				// Send [DONE]
@@ -179,7 +186,11 @@ func (h *Handler) HandleChatCompletionsStreaming(w http.ResponseWriter, r *http.
 	var tokenCount int
 	var promptTokens, completionTokens int
 
-	chunkChan, errChan := h.engine.CreateChatCompletionStream(admitReq.Ctx, req)
+	chunkChan, errChan, backend, err := h.router.RouteChatCompletionStream(admitReq.Ctx, req)
+	if err != nil {
+		h.writeSSEError(w, flusher, "Routing error: "+err.Error(), 500)
+		return
+	}
 
 	for {
 		select {
@@ -199,6 +210,9 @@ func (h *Handler) HandleChatCompletionsStreaming(w http.ResponseWriter, r *http.
 				h.metrics.TokensTotal.WithLabelValues("prompt").Add(float64(promptTokens))
 				h.metrics.TokensTotal.WithLabelValues("completion").Add(float64(completionTokens))
 				h.metrics.RequestsTotal.WithLabelValues(req.Model, "success").Inc()
+				if backend != nil {
+					h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "success").Inc()
+				}
 				h.accountant.RecordTokens(promptTokens, completionTokens)
 
 				// Send [DONE]

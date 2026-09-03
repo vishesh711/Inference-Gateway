@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/vishesh/inference-gateway/internal/backend"
 	"github.com/vishesh/inference-gateway/internal/cache"
 	"github.com/vishesh/inference-gateway/internal/engine"
 	"github.com/vishesh/inference-gateway/internal/metrics"
@@ -15,9 +16,9 @@ import (
 
 // Handler manages HTTP endpoints and request processing
 type Handler struct {
-	engine     *engine.Client
+	router     *backend.Router
 	admission  *scheduler.AdmissionController
-	scheduler  *scheduler.Scheduler
+	scheduler  *scheduler.HybridScheduler
 	batcher    *scheduler.EmbeddingBatcher
 	cache      *cache.Cache
 	metrics    *metrics.Metrics
@@ -29,16 +30,16 @@ type Handler struct {
 
 // New creates a new handler
 func New(
-	engineClient *engine.Client,
+	router *backend.Router,
 	admission *scheduler.AdmissionController,
-	sched *scheduler.Scheduler,
+	sched *scheduler.HybridScheduler,
 	c *cache.Cache,
 	m *metrics.Metrics,
 	accountant interface{ RecordTokens(promptTokens, completionTokens int) },
 	reqTimeout time.Duration,
 ) *Handler {
 	return &Handler{
-		engine:     engineClient,
+		router:     router,
 		admission:  admission,
 		scheduler:  sched,
 		cache:      c,
@@ -122,13 +123,16 @@ func (h *Handler) HandleCompletions(w http.ResponseWriter, r *http.Request) {
 		h.metrics.InFlight.Set(float64(h.scheduler.InFlight()))
 		defer h.metrics.InFlight.Set(float64(h.scheduler.InFlight()))
 
-		// Call engine
+		// Call engine through router
 		genStart := time.Now()
-		resp, err := h.engine.CreateCompletion(admitReq.Ctx, &req)
+		resp, backend, err := h.router.RouteCompletion(admitReq.Ctx, &req)
 		genDuration := time.Since(genStart).Seconds()
 
 		if err != nil {
 			h.metrics.RequestsTotal.WithLabelValues(req.Model, "error").Inc()
+			if backend != nil {
+				h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "error").Inc()
+			}
 			admitReq.Response <- scheduler.Response{Err: err}
 			return
 		}
@@ -139,6 +143,9 @@ func (h *Handler) HandleCompletions(w http.ResponseWriter, r *http.Request) {
 		h.metrics.TokensTotal.WithLabelValues("prompt").Add(float64(resp.Usage.PromptTokens))
 		h.metrics.TokensTotal.WithLabelValues("completion").Add(float64(resp.Usage.CompletionTokens))
 		h.metrics.RequestsTotal.WithLabelValues(req.Model, "success").Inc()
+		if backend != nil {
+			h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "success").Inc()
+		}
 
 		// Record cost
 		h.accountant.RecordTokens(resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
@@ -238,13 +245,16 @@ func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		h.metrics.InFlight.Set(float64(h.scheduler.InFlight()))
 		defer h.metrics.InFlight.Set(float64(h.scheduler.InFlight()))
 
-		// Call engine
+		// Call engine through router
 		genStart := time.Now()
-		resp, err := h.engine.CreateChatCompletion(admitReq.Ctx, &req)
+		resp, backend, err := h.router.RouteChatCompletion(admitReq.Ctx, &req)
 		genDuration := time.Since(genStart).Seconds()
 
 		if err != nil {
 			h.metrics.RequestsTotal.WithLabelValues(req.Model, "error").Inc()
+			if backend != nil {
+				h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "error").Inc()
+			}
 			admitReq.Response <- scheduler.Response{Err: err}
 			return
 		}
@@ -255,6 +265,9 @@ func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		h.metrics.TokensTotal.WithLabelValues("prompt").Add(float64(resp.Usage.PromptTokens))
 		h.metrics.TokensTotal.WithLabelValues("completion").Add(float64(resp.Usage.CompletionTokens))
 		h.metrics.RequestsTotal.WithLabelValues(req.Model, "success").Inc()
+		if backend != nil {
+			h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "success").Inc()
+		}
 
 		// Record cost
 		h.accountant.RecordTokens(resp.Usage.PromptTokens, resp.Usage.CompletionTokens)

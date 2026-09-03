@@ -128,13 +128,16 @@ func (h *Handler) handleEmbeddingDirect(w http.ResponseWriter, ctx context.Conte
 	h.metrics.InFlight.Set(float64(h.scheduler.InFlight()))
 	defer h.metrics.InFlight.Set(float64(h.scheduler.InFlight()))
 
-	// Call engine
+	// Call engine through router
 	start := time.Now()
-	resp, err := h.engine.CreateEmbedding(ctx, req)
+	resp, backend, err := h.router.RouteEmbedding(ctx, req)
 	duration := time.Since(start).Seconds()
 
 	if err != nil {
 		h.metrics.RequestsTotal.WithLabelValues(req.Model, "error").Inc()
+		if backend != nil {
+			h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "error").Inc()
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -143,6 +146,9 @@ func (h *Handler) handleEmbeddingDirect(w http.ResponseWriter, ctx context.Conte
 	h.metrics.GenerationSeconds.Observe(duration)
 	h.metrics.TokensTotal.WithLabelValues("prompt").Add(float64(resp.Usage.PromptTokens))
 	h.metrics.RequestsTotal.WithLabelValues(req.Model, "success").Inc()
+	if backend != nil {
+		h.metrics.BackendRequestsTotal.WithLabelValues(backend.ID, "success").Inc()
+	}
 
 	// Record cost
 	h.accountant.RecordTokens(resp.Usage.PromptTokens, 0)

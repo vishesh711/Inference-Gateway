@@ -102,6 +102,13 @@ func (b *Backend) IsHealthy() bool {
 	return b.Status == StatusHealthy && !b.CircuitOpen
 }
 
+// IsCircuitOpen returns true if the circuit breaker is open
+func (b *Backend) IsCircuitOpen() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.CircuitOpen
+}
+
 // Score calculates a routing score (lower is better)
 func (b *Backend) Score() float64 {
 	b.mu.RLock()
